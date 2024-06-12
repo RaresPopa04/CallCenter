@@ -30,28 +30,31 @@ async function convertTextToSpeech(text) {
     }
 }
 
-async function startServer() {
-    // await convertTextToSpeech('Hello World!');
 
-    const app = express();
+const app = express();
 
-    app.post('/voice', (req, res) => {
-        console.log('Incoming POST request from Twilio:', req.body);
-        const twiml = new VoiceResponse();
-        twiml.play({ loop: 1 }, `http://localhost:1337/${audioFileName}`);
+app.post("/voice", async (req, res) => {
+    const twiml = new VoiceResponse();
 
-        console.log('Twiml response:', twiml.toString());
-        
-        res.type('text/xml');
-        res.send(twiml.toString());
-    });
+    const text = 'Bună ziua!';
 
-    app.get(`/${audioFileName}`, (req, res) => {
-        res.sendFile(audioFilePath);
-    });
+    await convertTextToSpeech(text);
 
-    app.listen(1337, () => {
-        console.log('Express server listening on port 1337');
+    twiml.play({}, audioFileName);
+
+    res.type('text/xml');
+    res.send(twiml.toString());
+});
+
+app.get(`/${audioFileName}`, (req, res) => {
+    res.sendFile(audioFilePath);
+});
+
+function startServer() {
+    const port = process.env.PORT || 1337;
+
+    app.listen(port, () => {
+        console.log(`Server running on http://localhost:${port}`);
     });
 }
 
