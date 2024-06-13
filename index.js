@@ -8,7 +8,6 @@ const path = require("path");
 
 require("dotenv").config();
 
-//Include Google Speech to Text
 const speech = require("@google-cloud/speech");
 const client = new speech.SpeechClient({
   keyFilename: process.env.GOOGLE_APPLICATION_CREDENTIALS
@@ -21,7 +20,7 @@ const request = {
     sampleRateHertz: 8000,
     languageCode: "en-GB",
   },
-  interimResults: true, // If you want interim results, set this to true
+  interimResults: true,
 };
 
 wss.on("connection", function connection(ws) {
@@ -37,7 +36,6 @@ wss.on("connection", function connection(ws) {
         break;
       case "start":
         console.log(`Starting Media Stream ${msg.streamSid}`);
-        // Create Stream to the Google Speech to Text API
         recognizeStream = client
           .streamingRecognize(request)
           .on("error", console.error)
@@ -56,7 +54,6 @@ wss.on("connection", function connection(ws) {
           });
         break;
       case "media":
-        // Write Media Packets to the recognize stream
         recognizeStream.write(msg.media.payload);
         break;
       case "stop":
