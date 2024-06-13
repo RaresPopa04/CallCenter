@@ -1,10 +1,11 @@
 const fs = require('fs');
 const path = require('path');
 const OpenAI = require('openai');
+const dotenv = require('dotenv');
+dotenv.config();
 
 const openai = new OpenAI({
-    apiKey: "sk-proj-59U5ZFvfRPflzYX3vkXnT3BlbkFJ3oyrjmEbJuO6xaCJVxPq"
-});
+    apiKey: process.env.OPENAI_API_KEY,});
 
 const speechFile = path.resolve("./speech.mp3");
 
