@@ -1,2 +1,5 @@
 # ignore node_modules
 node_modules
+output.mp3
+cred.json
+.env

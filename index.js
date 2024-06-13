@@ -1,61 +1,89 @@
-const axios = require('axios');
-const fs = require('fs');
-const path = require('path');
-const express = require('express');
-const { VoiceResponse } = require('twilio').twiml;
-
-const apiKey = "sk_55b553453cf543178bb29583420a683a32a61e32550d8468";
-const audioFileName = 'output.mp3';
-const audioFilePath = path.join(__dirname, audioFileName);
-
-async function convertTextToSpeech(text) {
-    try {
-        const response = await axios.post(
-            'https://api.elevenlabs.io/v1/text-to-speech/NihRgaLj2HWAjvZ5XNxl',
-            { text: text },
-            {
-                headers: {
-                    'xi-api-key': apiKey,
-                    'Content-Type': 'application/json'
-                },
-                responseType: 'arraybuffer'
-            }
-        );
-
-        fs.writeFileSync(audioFilePath, response.data);
-
-        console.log('Audio file saved to', audioFilePath);
-    } catch (error) {
-        console.error('Error converting text to speech:', error);
-    }
-}
-
-
+const WebSocket = require("ws");
+const express = require("express");
 const app = express();
+const server = require("http").createServer(app);
+const wss = new WebSocket.Server({ server });
 
-app.post("/voice", async (req, res) => {
-    const twiml = new VoiceResponse();
+const path = require("path");
 
-    const text = 'Bună ziua!';
+require("dotenv").config();
 
-    await convertTextToSpeech(text);
-
-    twiml.play({}, audioFileName);
-
-    res.type('text/xml');
-    res.send(twiml.toString());
+//Include Google Speech to Text
+const speech = require("@google-cloud/speech");
+const client = new speech.SpeechClient({
+  keyFilename: process.env.GOOGLE_APPLICATION_CREDENTIALS
 });
 
-app.get(`/${audioFileName}`, (req, res) => {
-    res.sendFile(audioFilePath);
+//Configure Transcription Request
+const request = {
+  config: {
+    encoding: "MULAW",
+    sampleRateHertz: 8000,
+    languageCode: "en-GB",
+  },
+  interimResults: true, // If you want interim results, set this to true
+};
+
+wss.on("connection", function connection(ws) {
+  console.log("New Connection Initiated");
+
+  let recognizeStream = null;
+
+  ws.on("message", function incoming(message) {
+    const msg = JSON.parse(message);
+    switch (msg.event) {
+      case "connected":
+        console.log(`A new call has connected.`);
+        break;
+      case "start":
+        console.log(`Starting Media Stream ${msg.streamSid}`);
+        // Create Stream to the Google Speech to Text API
+        recognizeStream = client
+          .streamingRecognize(request)
+          .on("error", console.error)
+          .on("data", (data) => {
+            console.log(data.results[0].alternatives[0].transcript);
+            wss.clients.forEach((client) => {
+              if (client.readyState === WebSocket.OPEN) {
+                client.send(
+                  JSON.stringify({
+                    event: "interim-transcription",
+                    text: data.results[0].alternatives[0].transcript,
+                  })
+                );
+              }
+            });
+          });
+        break;
+      case "media":
+        // Write Media Packets to the recognize stream
+        recognizeStream.write(msg.media.payload);
+        break;
+      case "stop":
+        console.log(`Call Has Ended`);
+        recognizeStream.destroy();
+        break;
+    }
+  });
 });
 
-function startServer() {
-    const port = process.env.PORT || 1337;
+app.use(express.static("public"));
 
-    app.listen(port, () => {
-        console.log(`Server running on http://localhost:${port}`);
-    });
-}
+app.get("/", (req, res) => res.sendFile(path.join(__dirname, "/index.html")));
 
-startServer();
+app.post("/", (req, res) => {
+  res.set("Content-Type", "text/xml");
+
+  res.send(`
+    <Response>
+      <Start>
+        <Stream url="wss://${req.headers.host}/"/>
+      </Start>
+      <Say>I will stream the next 60 seconds of audio through your websocket</Say>
+      <Pause length="60" />
+    </Response>
+  `);
+});
+
+console.log("Listening on Port 8080");
+server.listen(8080);
