@@ -106,7 +106,7 @@ const openAI = require('openai');
 const { ReservationContext } = require("twilio/lib/rest/taskrouter/v1/workspace/task/reservation");
 
 const client = new openAI.OpenAI({
-  apiKey: ,
+  apiKey: process.env.OPENAI_API_KEY1,
 });
 
 async function getResponse(prompt) {
@@ -132,6 +132,7 @@ async function getResponse(prompt) {
   }
 }
 
+const reservations = [];
 const conversationContext = {};
 
 const processConversation = async (transcription, callSid) => {
@@ -158,20 +159,39 @@ const processConversation = async (transcription, callSid) => {
   // Extract reservation details from the response
   await extractReservationDetails(transcription, context.reservation);
 
-  console.log(context.reservation);
+  // console.log(context.reservation);
   
   // Check if we have all necessary information to make a reservation
   if (context.reservation.date && context.reservation.time && context.reservation.people && context.reservation.name) {
-    context.reservation.confirmed = true;
-    makeReservation(callSid, context.reservation);
-    return "Rezervarea a fost realizată cu succes. Mulțumim!";
+    
+    if(!checkAvability(context.reservation)){
+      const alternatives = getAlternativeTimes(context.reservation);
+      return `Ne pare rău, dar la ora dorită nu mai sunt locuri disponibile. Puteți alege dintre următoarele opțiuni: ${alternatives.join(", ")}. Vă rog să specificați o nouă oră.`;
+    }
+    else{
+      context.reservation.confirmed = true;
+      reservations.push(context.reservation);
+      makeReservation(callSid, context.reservation);
+      delete conversationContext[callSid];
+      return "Rezervarea a fost realizată cu succes. Mulțumim!";
+
+    }
   }
   return response;
 };
 
+const checkAvability = (reservation) => {
+  for(let i = 0; i < reservations.length; i++){
+    if(reservations[i].date === reservation.date && reservations[i].time === reservation.time){
+      return false;
+    }
+  }
+  return true;
+}
+
 const getFilteredResponse = async (response) => {
   try {
-    console.log("Response: " + response);
+    // console.log("Response: " + response);
     const question = `This is a client's request: ${response}.
     Today is ${new Date().toLocaleDateString()} and the time is ${new Date().toLocaleTimeString()}. This is just for refference in the response, do not use it if not needed. To be used in case the client's request for a date like tomorrow or next week.
     The client's response is in Romanian, this means that 'maine' means tomorrow.
@@ -203,7 +223,7 @@ const getFilteredResponse = async (response) => {
 
 const extractReservationDetails = async (response, reservation) => {
   const filteredResponse = await getFilteredResponse(response);
-  console.log("Filtered response: " + filteredResponse);
+  // console.log("Filtered response: " + filteredResponse);
 
   const dateRegex = /\b(\d{2}-\d{2}-\d{4})\b/;
   const timeRegex = /\b(\d{2}:\d{2})\b/;
@@ -220,6 +240,21 @@ const extractReservationDetails = async (response, reservation) => {
   if (peopleMatch) reservation.people = peopleMatch[1];
   if (nameMatch) reservation.name = nameMatch[1];
 };
+
+const getAlternativeTimes = (reservation) => {
+  const alternatives = [];
+  // get closest 2 alternative times if available
+  let time = new Date();
+  time.setHours(parseInt(reservation.time.split(":")[0]));
+  time.setMinutes(parseInt(reservation.time.split(":")[1]));
+
+  for(let i = 0; i < 2; i++){
+    time.setMinutes(time.getMinutes() + 30);
+    alternatives.push(`${time.getHours()}:${time.getMinutes()}`);
+  }
+
+  return alternatives;
+}
 
 const makeReservation = (callSid, reservation) => {
   // Implement the logic to make the reservation
@@ -240,4 +275,21 @@ const makeReservation = (callSid, reservation) => {
 
   const response4 = await processConversation("Pe la 2:30", "call123");
   console.log(response4);
+
+
+  const response11 = await processConversation("Vreau să fac o rezervare pentru 3 persoane.", "call123");
+  console.log(response11);
+
+
+  const response31 = await processConversation("Numele meu este Andrei.", "call123");
+  console.log(response31);
+
+  const response21 = await processConversation("Mâine", "call123");
+  console.log(response21);
+
+  const response41 = await processConversation("Pe la 2:30", "call123");
+  console.log(response41);
+
+  const response51 = await processConversation("Pe la 3:30", "call123");
+  console.log(response51);
 })();
