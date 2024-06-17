@@ -79,7 +79,7 @@ function getSignedTranscribeWebsocketUrl() {
       protocol: "wss",
       expires: 15,
       region: process.env.AWS_REGION,
-      query: "language-code=en-US&media-encoding=pcm&sample-rate=8000",
+      query: "language-code=ro-RO&media-encoding=pcm&sample-rate=8000",
     }
   );
 }
